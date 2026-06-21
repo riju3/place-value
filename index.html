@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>CIPHER // Letter Value Decoder</title>
+<style>
+  :root{
+    --bg:#05070a;
+    --bg-panel:#0a0f14;
+    --green:#39ff6a;
+    --green-dim:#0f7a33;
+    --green-glow:#39ff6a;
+    --amber:#ffb000;
+    --text:#d8ffe2;
+    --text-dim:#5c7d68;
+    --border:#143322;
+  }
+
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0;
+    padding:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:'Courier New', 'Consolas', monospace;
+    overflow-x:hidden;
+    min-height:100vh;
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    #matrix-canvas{display:none;}
+    .glitch::before, .glitch::after{display:none;}
+  }
+
+  #matrix-canvas{
+    position:fixed;
+    top:0; left:0;
+    width:100%; height:100%;
+    z-index:0;
+    opacity:0.75;
+  }
+
+  .scanline-overlay{
+    position:fixed;
+    top:0;left:0;width:100%;height:100%;
+    z-index:1;
+    pointer-events:none;
+    background:repeating-linear-gradient(
+      to bottom,
+      rgba(0,0,0,0) 0px,
+      rgba(0,0,0,0) 2px,
+      rgba(0,0,0,0.12) 3px
+    );
+    mix-blend-mode:overlay;
+  }
+
+  .vignette{
+    position:fixed;
+    top:0;left:0;width:100%;height:100%;
+    z-index:1;
+    pointer-events:none;
+    background:radial-gradient(ellipse at center, rgba(0,0,0,0) 40%, rgba(0,0,0,0.85) 100%);
+  }
+
+  .wrap{
+    position:relative;
+    z-index:2;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    padding:48px 20px 80px;
+  }
+
+  header{
+    text-align:center;
+    margin-bottom:36px;
+  }
+
+  .eyebrow{
+    letter-spacing:0.35em;
+    font-size:11px;
+    color:var(--green-dim);
+    text-transform:uppercase;
+    margin-bottom:14px;
+  }
+
+  h1{
+    font-size:clamp(32px, 7vw, 64px);
+    margin:0;
+    color:var(--green);
+    text-shadow:
+      0 0 4px rgba(57,255,106,0.9),
+      0 0 18px rgba(57,255,106,0.55),
+      0 0 40px rgba(57,255,106,0.25);
+    letter-spacing:0.04em;
+    font-weight:700;
+    position:relative;
+  }
+
+  .glitch{
+    display:inline-block;
+    position:relative;
+  }
+  .glitch::before, .glitch::after{
+    content:attr(data-text);
+    position:absolute;
+    top:0; left:0;
+    width:100%;
+    opacity:0.7;
+    pointer-events:none;
+  }
+  .glitch::before{
+    color:#ff2b6b;
+    animation:glitchTop 4.5s infinite linear;
+    clip-path:inset(0 0 60% 0);
+  }
+  .glitch::after{
+    color:#00e0ff;
+    animation:glitchBottom 5.2s infinite linear;
+    clip-path:inset(60% 0 0 0);
+  }
+  @keyframes glitchTop{
+    0%,92%,100%{transform:translate(0,0); opacity:0;}
+    93%{transform:translate(-2px,-1px); opacity:0.8;}
+    94%{transform:translate(2px,1px); opacity:0.6;}
+    95%{transform:translate(-1px,0); opacity:0;}
+  }
+  @keyframes glitchBottom{
+    0%,90%,100%{transform:translate(0,0); opacity:0;}
+    91%{transform:translate(2px,1px); opacity:0.8;}
+    92%{transform:translate(-2px,-1px); opacity:0.6;}
+    93%{transform:translate(1px,0); opacity:0;}
+  }
+
+  .subhead{
+    margin-top:16px;
+    font-size:14px;
+    color:var(--text-dim);
+    letter-spacing:0.05em;
+  }
+  .subhead strong{color:var(--green);}
+
+  .legend{
+    margin-top:6px;
+    font-size:12px;
+    color:var(--text-dim);
+  }
+
+  main{
+    width:100%;
+    max-width:760px;
+  }
+
+  .panel{
+    background:rgba(8,14,11,0.82);
+    border:1px solid var(--border);
+    border-radius:4px;
+    padding:28px;
+    backdrop-filter:blur(6px);
+    box-shadow:0 0 40px rgba(0,0,0,0.6), inset 0 0 60px rgba(57,255,106,0.03);
+  }
+
+  .input-row{
+    position:relative;
+  }
+
+  label{
+    display:block;
+    font-size:11px;
+    letter-spacing:0.25em;
+    text-transform:uppercase;
+    color:var(--green-dim);
+    margin-bottom:10px;
+  }
+
+  #word-input{
+    width:100%;
+    background:#020603;
+    border:1px solid var(--green-dim);
+    color:var(--green);
+    font-family:inherit;
+    font-size:22px;
+    letter-spacing:0.08em;
+    padding:16px 18px;
+    border-radius:3px;
+    outline:none;
+    caret-color:var(--green);
+    transition:border-color 0.2s, box-shadow 0.2s;
+    text-transform:uppercase;
+  }
+  #word-input::placeholder{
+    color:#1f4a2c;
+    text-transform:none;
+    letter-spacing:0.02em;
+  }
+  #word-input:focus{
+    border-color:var(--green);
+    box-shadow:0 0 0 1px rgba(57,255,106,0.3), 0 0 24px rgba(57,255,106,0.25);
+  }
+
+  .space-hint{
+    margin-top:10px;
+    font-size:12px;
+    color:var(--amber);
+    height:16px;
+    opacity:0;
+    transition:opacity 0.15s;
+    letter-spacing:0.05em;
+  }
+  .space-hint.show{opacity:1;}
+
+  .divider{
+    margin:26px 0;
+    height:1px;
+    background:linear-gradient(to right, transparent, var(--border), transparent);
+  }
+
+  .output-label{
+    font-size:11px;
+    letter-spacing:0.25em;
+    text-transform:uppercase;
+    color:var(--green-dim);
+    margin-bottom:16px;
+    display:flex;
+    justify-content:space-between;
+    align-items:baseline;
+  }
+
+  .count-badge{
+    font-size:11px;
+    color:var(--text-dim);
+    letter-spacing:0.05em;
+  }
+
+  .grid{
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px;
+    min-height:64px;
+  }
+
+  .empty-state{
+    color:var(--text-dim);
+    font-size:13px;
+    letter-spacing:0.05em;
+    padding:18px 0;
+  }
+
+  .tile{
+    background:#020905;
+    border:1px solid var(--green-dim);
+    border-radius:3px;
+    min-width:54px;
+    padding:10px 8px 8px;
+    text-align:center;
+    position:relative;
+    animation:tileIn 0.28s ease both;
+  }
+  .tile.space-tile{
+    border-color:#3a2d12;
+  }
+  @keyframes tileIn{
+    from{opacity:0; transform:translateY(6px) scale(0.92);}
+    to{opacity:1; transform:translateY(0) scale(1);}
+  }
+
+  .tile .letter{
+    display:block;
+    font-size:10px;
+    color:var(--text-dim);
+    letter-spacing:0.1em;
+    margin-bottom:4px;
+  }
+  .tile .value{
+    display:block;
+    font-size:22px;
+    color:var(--green);
+    text-shadow:0 0 8px rgba(57,255,106,0.5);
+    font-weight:700;
+  }
+  .tile.space-tile .value{
+    color:var(--amber);
+    text-shadow:0 0 8px rgba(255,176,0,0.5);
+  }
+  .tile.space-tile .letter{
+    color:#7a5c1f;
+  }
+
+  .sequence-row{
+    margin-top:22px;
+  }
+  #sequence-output{
+    width:100%;
+    background:#020603;
+    border:1px solid var(--border);
+    color:var(--green);
+    font-size:16px;
+    letter-spacing:0.05em;
+    padding:14px 16px;
+    border-radius:3px;
+    word-break:break-all;
+    min-height:24px;
+  }
+
+  .actions{
+    margin-top:16px;
+    display:flex;
+    gap:10px;
+    flex-wrap:wrap;
+  }
+
+  button{
+    background:transparent;
+    border:1px solid var(--green-dim);
+    color:var(--green);
+    font-family:inherit;
+    font-size:12px;
+    letter-spacing:0.15em;
+    text-transform:uppercase;
+    padding:10px 16px;
+    border-radius:3px;
+    cursor:pointer;
+    transition:all 0.15s;
+  }
+  button:hover{
+    background:rgba(57,255,106,0.08);
+    border-color:var(--green);
+    box-shadow:0 0 12px rgba(57,255,106,0.2);
+  }
+  button:active{transform:scale(0.97);}
+  button:focus-visible{
+    outline:2px solid var(--green);
+    outline-offset:2px;
+  }
+
+  footer{
+    margin-top:36px;
+    font-size:11px;
+    color:var(--text-dim);
+    letter-spacing:0.1em;
+    text-align:center;
+  }
+
+  @media (max-width: 480px){
+    .panel{padding:20px 16px;}
+    #word-input{font-size:18px; padding:14px;}
+    .tile{min-width:46px;}
+    .tile .value{font-size:18px;}
+  }
+</style>
+</head>
+<body>
+
+<canvas id="matrix-canvas"></canvas>
+<div class="scanline-overlay"></div>
+<div class="vignette"></div>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">A=1 · B=2 · C=3 ··· Z=26 · SPACE=0</div>
+    <h1 class="glitch" data-text="CIPHER">CIPHER</h1>
+  </header>
+
+  <main>
+    <div class="panel">
+      <div class="input-row">
+        <label for="word-input">Input</label>
+        <input id="word-input" type="text" placeholder="Start typing..." autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="500"/>
+        <div class="space-hint" id="space-hint">␣ SPACE DETECTED → VALUE = 0</div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="output-label">
+        <span>Decoded Output</span>
+        <span class="count-badge" id="char-count">0 characters</span>
+      </div>
+
+      <div class="grid" id="tile-grid">
+        <div class="empty-state" id="empty-state">// awaiting input —</div>
+      </div>
+
+      <div class="sequence-row">
+        <label for="sequence-output">Raw Sequence</label>
+        <div id="sequence-output">—</div>
+      </div>
+
+      <div class="actions">
+        <button id="copy-btn" type="button">Copy sequence</button>
+        <button id="clear-btn" type="button">Clear</button>
+      </div>
+    </div>
+
+    <footer>NO DATA LEAVES YOUR BROWSER · EVERYTHING RUNS LOCALLY</footer>
+  </main>
+</div>
+
+<script>
+(function(){
+  // ---------- Matrix rain background ----------
+  var canvas = document.getElementById('matrix-canvas');
+  var ctx = canvas.getContext('2d');
+  var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  var fontSize = 16;
+  var columns, drops;
+  var chars = 'アイウエオカキクケコサシスセソタチツテト0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+  function resize(){
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    columns = Math.floor(canvas.width / fontSize);
+    drops = new Array(columns).fill(0).map(function(){
+      return Math.random() * -100;
+    });
+    ctx.fillStyle = '#05070a';
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  function draw(){
+    ctx.fillStyle = 'rgba(5,7,10,0.12)';
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.font = fontSize + 'px monospace';
+    ctx.textBaseline = 'top';
+
+    for(var i=0;i<columns;i++){
+      var text = chars[Math.floor(Math.random()*chars.length)];
+      var x = i*fontSize;
+      var y = drops[i]*fontSize;
+
+      ctx.fillStyle = 'rgba(180,255,200,0.95)';
+      ctx.fillText(text, x, y);
+
+      ctx.fillStyle = 'rgba(57,255,106,0.5)';
+      ctx.fillText(text, x, y - fontSize);
+
+      if(y > canvas.height && Math.random() > 0.975){
+        drops[i] = 0;
+      }
+      drops[i]++;
+    }
+  }
+
+  if(!reduceMotion){
+    requestAnimationFrame(function tick(){
+      draw();
+      setTimeout(function(){ requestAnimationFrame(tick); }, 45);
+    });
+  }
+
+  // ---------- Letter -> place value logic ----------
+  var input = document.getElementById('word-input');
+  var grid = document.getElementById('tile-grid');
+  var emptyState = document.getElementById('empty-state');
+  var seqOutput = document.getElementById('sequence-output');
+  var spaceHint = document.getElementById('space-hint');
+  var charCount = document.getElementById('char-count');
+  var copyBtn = document.getElementById('copy-btn');
+  var clearBtn = document.getElementById('clear-btn');
+
+  function valueFor(ch){
+    if(ch === ' ') return 0;
+    var upper = ch.toUpperCase();
+    var code = upper.charCodeAt(0);
+    if(code >= 65 && code <= 90){
+      return code - 64; // A=1 ... Z=26
+    }
+    return null; // non A-Z, non-space characters are skipped
+  }
+
+  function render(){
+    var raw = input.value;
+    charCount.textContent = raw.length + (raw.length === 1 ? ' character' : ' characters');
+
+    // live space hint: show if the last typed char is a space
+    if(raw.length > 0 && raw[raw.length-1] === ' '){
+      spaceHint.classList.add('show');
+    } else {
+      spaceHint.classList.remove('show');
+    }
+
+    grid.innerHTML = '';
+
+    if(raw.length === 0){
+      var es = document.createElement('div');
+      es.className = 'empty-state';
+      es.id = 'empty-state';
+      es.textContent = '// awaiting input —';
+      grid.appendChild(es);
+      seqOutput.textContent = '—';
+      return;
+    }
+
+    var sequence = [];
+
+    for(var i=0;i<raw.length;i++){
+      var ch = raw[i];
+      var val = valueFor(ch);
+      if(val === null) continue; // skip punctuation/symbols silently
+
+      sequence.push(val);
+
+      var tile = document.createElement('div');
+      tile.className = 'tile' + (ch === ' ' ? ' space-tile' : '');
+
+      var letterEl = document.createElement('span');
+      letterEl.className = 'letter';
+      letterEl.textContent = ch === ' ' ? 'SPC' : ch.toUpperCase();
+
+      var valueEl = document.createElement('span');
+      valueEl.className = 'value';
+      valueEl.textContent = val;
+
+      tile.appendChild(letterEl);
+      tile.appendChild(valueEl);
+      grid.appendChild(tile);
+    }
+
+    seqOutput.textContent = sequence.length ? sequence.join(' ') : '—';
+  }
+
+  input.addEventListener('input', render);
+
+  copyBtn.addEventListener('click', function(){
+    var text = seqOutput.textContent;
+    if(text && text !== '—'){
+      navigator.clipboard.writeText(text).then(function(){
+        var original = copyBtn.textContent;
+        copyBtn.textContent = 'Copied ✓';
+        setTimeout(function(){ copyBtn.textContent = original; }, 1200);
+      });
+    }
+  });
+
+  clearBtn.addEventListener('click', function(){
+    input.value = '';
+    render();
+    input.focus();
+  });
+
+  render();
+})();
+</script>
+
+</body>
+</html>
